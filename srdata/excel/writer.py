@@ -5,9 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Mapping
 
+import re
+
 import pandas as pd
 
 _MAX_SHEET_NAME = 31
+_NUMBER_RE = re.compile(r"^-?\d+(\.\d+)?$")
 _FORBIDDEN = set('[]:*?/\\')
 
 
@@ -17,11 +20,15 @@ def save_sheets(
     *,
     index: bool = False,
     autofit: bool = True,
+    freeze_header: bool = False,
+    numeric_text: bool = False,
 ) -> Path:
     """여러 DataFrame 을 시트별로 한 파일에 저장한다.
 
     sheets: {시트이름: DataFrame}. DataFrame 하나만 주면 "Sheet1" 로 저장.
     시트 이름은 엑셀 규칙(31자, 금지문자)에 맞게 자동 보정한다.
+    freeze_header=True 이면 첫 행(머리글)을 틀 고정한다.
+    numeric_text=True 이면 "12.20" 같은 숫자 문자열을 숫자로 바꾸되, 표시 형식으로 소수 자릿수를 원문대로 유지한다.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -35,6 +42,10 @@ def save_sheets(
             df.to_excel(writer, sheet_name=sheet, index=index)
             if autofit:
                 _autofit(writer.sheets[sheet], df, index=index)
+            if freeze_header:
+                writer.sheets[sheet].freeze_panes = "A2"
+            if numeric_text:
+                numeric_strings_to_numbers(writer.sheets[sheet], skip_rows=1)
     return path
 
 
@@ -63,3 +74,22 @@ def _autofit(ws, df: pd.DataFrame, *, index: bool, min_width: int = 6, max_width
 def _display_len(value) -> int:
     s = "" if value is None or (isinstance(value, float) and value != value) else str(value)
     return sum(2 if ord(ch) > 0x2E7F else 1 for ch in s)
+
+
+def numeric_strings_to_numbers(ws, *, skip_rows: int = 1) -> int:
+    """숫자만 있는 문자열 셀을 숫자로 바꾸고, 소수 자릿수를 표시 형식으로 남긴다.
+
+    "1.60" → 1.6 (형식 0.00), "0" → 0, "102-04"·"2025.05.29" 는 그대로. 바꾼 셀 수를 돌려준다.
+    """
+    n = 0
+    for row in ws.iter_rows(min_row=skip_rows + 1):
+        for cell in row:
+            v = cell.value
+            if isinstance(v, str) and _NUMBER_RE.match(v):
+                if "." in v:
+                    cell.value = float(v)
+                    cell.number_format = "0." + "0" * len(v.split(".")[1])
+                else:
+                    cell.value = int(v)
+                n += 1
+    return n

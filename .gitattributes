@@ -1,0 +1,9 @@
+# 저장소에는 LF로 저장하고, 체크아웃 시 OS 기본 줄바꿈을 따른다 (Windows/클라우드 혼용).
+* text=auto
+
+# 바이너리
+*.pdf binary
+*.xlsx binary
+*.xls binary
+*.png binary
+*.jpg binary

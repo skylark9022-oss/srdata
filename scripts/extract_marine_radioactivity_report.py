@@ -15,6 +15,9 @@
     분리불가  분리 규칙에 맞지 않아 비고 열에 원문을 그대로 둔 셀
     표2.2 …   측정값 열을 "열이름 | 값", "열이름 | 불확도", "열이름 | 최소" … 로 나눈 표
 
+수동 보정 분리 파일("…_분리_보정.xlsx"): 원문 PDF 의 표기 오류로 분리되지 않는 셀을 MANUAL_CORRECTIONS 에 따라
+고친 뒤 분리한 것. "보정" 시트에 시트·행·열·원문·보정값·근거를 남긴다. 그 밖의 내용은 분리 파일과 같다.
+
 셀 값은 원문 텍스트 그대로("1.75±0.15", "<0.083"). 숫자만 있는 셀은 숫자로 바꾸되
 소수 자릿수는 셀 표시 형식으로 원문대로 유지한다("1.60" → 1.6, 형식 0.00).
 세로 병합 셀(해역·정점 등)은 아래 행에 같은 값을 채운다.
@@ -90,6 +93,16 @@ def build_sheets(tables: list[ReportTable]) -> dict[str, pd.DataFrame]:
     return out
 
 
+# 원문 표기 오류 수동 보정: (시트, 열 이름, 원문 텍스트) -> (보정 텍스트, 근거).
+# 같은 시트·열에서 원문 텍스트가 정확히 일치하는 셀에만 적용한다.
+MANUAL_CORRECTIONS = {
+    ("표2.22", "137Cs 방사능농도 (mBq/kg-fresh) / 2020~2024년", "(15.3(<10.0~21.4)"): (
+        "15.3(<10.0~21.4)",
+        "원문의 여는 괄호 중복. 같은 열의 다른 셀(표 2.23 '28.3(20.3~33.7)' 등)이 모두 '값(최소~최대)' 형식이고, "
+        "같은 표 평균 행의 과거 범위 '<10.0~<51.3' 의 최소값 '<10.0' 과 일치.",
+    ),
+}
+
 SPLIT_GUIDE = [
     ("원칙", "측정값이 들어 있는 열(±, 부등호, 숫자 범위 중 하나라도 있는 열)만 성분 열로 나눈다. 나머지 열은 원문 파일과 같다."),
     ("열 이름", "\"원래 열 이름 | 성분\". 성분은 비고, 부등호, 값, 불확도, 최소부등호, 최소, 최대부등호, 최대. 그 열에서 한 번도 쓰이지 않은 성분 열은 만들지 않는다."),
@@ -107,21 +120,44 @@ SPLIT_GUIDE = [
 ]
 
 
-def build_split_sheets(tables: list[ReportTable], raw_sheets: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+def apply_corrections(tables: list[ReportTable]) -> tuple[dict[str, pd.DataFrame], list[dict]]:
+    """MANUAL_CORRECTIONS 를 적용한 DataFrame 과 보정 기록을 돌려준다. 원본 ReportTable 은 바꾸지 않는다."""
+    frames: dict[str, pd.DataFrame] = {}
+    log_rows: list[dict] = []
+    for t in tables:
+        df = t.to_frame().copy()
+        for (sheet, col, original), (fixed, reason) in MANUAL_CORRECTIONS.items():
+            if sheet != t.table_id or col not in df.columns:
+                continue
+            for i in df.index[df[col] == original]:
+                df.at[i, col] = fixed
+                log_rows.append({"시트명": sheet, "엑셀행": int(i) + 2, "열": col, "원문": original, "보정값": fixed, "근거": reason})
+        frames[t.table_id] = df
+    return frames, log_rows
+
+
+def build_split_sheets(
+    tables: list[ReportTable], raw_sheets: dict[str, pd.DataFrame], *, corrected: bool = False
+) -> dict[str, pd.DataFrame]:
     index = raw_sheets["목록"].copy()
     index["분리한 열"] = ""
     unparsed_rows = []
     out: dict[str, pd.DataFrame] = {}
+    frames, corrections = apply_corrections(tables) if corrected else ({t.table_id: t.to_frame() for t in tables}, [])
     for t in tables:
         sheet = t.table_id
-        r = split_measurement_columns(t.to_frame())
+        r = split_measurement_columns(frames[sheet])
         out[sheet] = r.frame
         index.loc[index["시트명"] == sheet, "분리한 열"] = "\n".join(r.split_columns)
         for i, col, text in r.unparsed:
             unparsed_rows.append({"시트명": sheet, "엑셀행": i + 2, "열": col, "원문": text})
     guide = pd.DataFrame(SPLIT_GUIDE, columns=["항목", "설명"])
     unparsed = pd.DataFrame(unparsed_rows, columns=["시트명", "엑셀행", "열", "원문"])
-    return {"설명": guide, "목록": index, "분리불가": unparsed, **out}
+    sheets = {"설명": guide, "목록": index, "분리불가": unparsed}
+    if corrected:
+        guide.loc[len(guide)] = ["수동 보정", "원문 표기 오류를 '보정' 시트대로 고친 뒤 분리한 파일. 보정하지 않은 분리 파일은 '…_분리.xlsx'."]
+        sheets["보정"] = pd.DataFrame(corrections, columns=["시트명", "엑셀행", "열", "원문", "보정값", "근거"])
+    return {**sheets, **out}
 
 
 def main() -> None:
@@ -157,6 +193,12 @@ def main() -> None:
         save_sheets(split_out, split_sheets, freeze_header=True, numeric_text=table_sheets)
         log.info("분리 불가 셀 %d개", len(split_sheets["분리불가"]))
         log.info("저장: %s", split_out)
+
+        fixed_out = args.out.with_name(args.out.stem + "_분리_보정" + args.out.suffix)
+        fixed_sheets = build_split_sheets(kept, sheets, corrected=True)
+        save_sheets(fixed_out, fixed_sheets, freeze_header=True, numeric_text=table_sheets)
+        log.info("수동 보정 %d곳, 보정 후 분리 불가 셀 %d개", len(fixed_sheets["보정"]), len(fixed_sheets["분리불가"]))
+        log.info("저장: %s", fixed_out)
 
 
 if __name__ == "__main__":

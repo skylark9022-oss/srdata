@@ -4,10 +4,16 @@
     python scripts/extract_marine_radioactivity_report.py data/raw/보고서.pdf -o data/processed/out.xlsx
     python scripts/extract_marine_radioactivity_report.py --all          # 제외 목록 무시, 캡션 있는 표 전부
 
-결과 파일 구성:
+결과 파일 구성 (원문 그대로 파일):
     목록      시트명·구분·표번호·제목·PDF쪽·인쇄쪽·행수·열수·각주·비고
     각주표시  값에서 떼어 낸 각주 위첨자("1)" 등)의 위치와 원문 값
     표2.2 …   표 하나당 시트 하나. 여러 쪽에 걸친 표([계속])는 한 시트로 합침.
+
+값·불확도 분리 파일(기본으로 같이 만든다, --no-split 으로 생략. 이름은 "…_분리.xlsx"):
+    설명      분리 규칙
+    목록      위와 같음 + 분리한 열 목록
+    분리불가  분리 규칙에 맞지 않아 비고 열에 원문을 그대로 둔 셀
+    표2.2 …   측정값 열을 "열이름 | 값", "열이름 | 불확도", "열이름 | 최소" … 로 나눈 표
 
 셀 값은 원문 텍스트 그대로("1.75±0.15", "<0.083"). 숫자만 있는 셀은 숫자로 바꾸되
 소수 자릿수는 셀 표시 형식으로 원문대로 유지한다("1.60" → 1.6, 형식 0.00).
@@ -22,6 +28,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from srdata.analysis.measurements import PART_NAMES, split_measurement_columns
 from srdata.config import PROCESSED_DIR, RAW_DIR, ensure_dirs
 from srdata.excel import save_sheets
 from srdata.pdf import ReportTable, extract_report_tables
@@ -83,6 +90,40 @@ def build_sheets(tables: list[ReportTable]) -> dict[str, pd.DataFrame]:
     return out
 
 
+SPLIT_GUIDE = [
+    ("원칙", "측정값이 들어 있는 열(±, 부등호, 숫자 범위 중 하나라도 있는 열)만 성분 열로 나눈다. 나머지 열은 원문 파일과 같다."),
+    ("열 이름", "\"원래 열 이름 | 성분\". 성분은 비고, 부등호, 값, 불확도, 최소부등호, 최소, 최대부등호, 최대. 그 열에서 한 번도 쓰이지 않은 성분 열은 만들지 않는다."),
+    ("1.75±0.15", "값 1.75, 불확도 0.15"),
+    ("<0.083", "부등호 <, 값 0.083 (최소검출가능농도 MDA 미만)"),
+    ("65.4", "값 65.4"),
+    ("1.04~1.94", "최소 1.04, 최대 1.94"),
+    ("<0.104~0.261", "최소부등호 <, 최소 0.104, 최대 0.261 (최대 쪽 부등호는 최대부등호)"),
+    ("1.24±0.20 (0.738~1.85)", "값 1.24, 불확도 0.20, 최소 0.738, 최대 1.85"),
+    ("112(107~121)", "값 112, 최소 107, 최대 121"),
+    ("- (<0.558)", "비고 -, 최소부등호 <, 최소 0.558 (괄호 안 값이 하나면 범위의 최소로 본다)"),
+    ("-, -*", "비고에 그대로. 값 없음"),
+    ("분리 불가", "규칙에 맞지 않는 문자열은 비고에 원문 그대로 두고 '분리불가' 시트에 적는다."),
+    ("숫자 표시", "유효숫자를 지키려고 소수 자릿수를 셀 표시 형식으로 남긴다(1.60 → 값 1.6, 표시 1.60)."),
+]
+
+
+def build_split_sheets(tables: list[ReportTable], raw_sheets: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    index = raw_sheets["목록"].copy()
+    index["분리한 열"] = ""
+    unparsed_rows = []
+    out: dict[str, pd.DataFrame] = {}
+    for t in tables:
+        sheet = t.table_id
+        r = split_measurement_columns(t.to_frame())
+        out[sheet] = r.frame
+        index.loc[index["시트명"] == sheet, "분리한 열"] = "\n".join(r.split_columns)
+        for i, col, text in r.unparsed:
+            unparsed_rows.append({"시트명": sheet, "엑셀행": i + 2, "열": col, "원문": text})
+    guide = pd.DataFrame(SPLIT_GUIDE, columns=["항목", "설명"])
+    unparsed = pd.DataFrame(unparsed_rows, columns=["시트명", "엑셀행", "열", "원문"])
+    return {"설명": guide, "목록": index, "분리불가": unparsed, **out}
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     ensure_dirs()
@@ -91,6 +132,7 @@ def main() -> None:
     parser.add_argument("-o", "--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--all", action="store_true", help="제외 목록을 무시하고 캡션 있는 표 전부 저장")
     parser.add_argument("--exclude", nargs="*", default=sorted(DEFAULT_EXCLUDE), help="제외할 표 ID (예: 부록1_표1)")
+    parser.add_argument("--no-split", action="store_true", help="값·불확도 분리 파일을 만들지 않음")
     args = parser.parse_args()
 
     if not args.pdf.exists():
@@ -108,6 +150,13 @@ def main() -> None:
     table_sheets = {name for name in sheets if name not in ("목록", "각주표시")}
     save_sheets(args.out, sheets, freeze_header=True, numeric_text=table_sheets)
     log.info("저장: %s", args.out)
+
+    if not args.no_split:
+        split_out = args.out.with_name(args.out.stem + "_분리" + args.out.suffix)
+        split_sheets = build_split_sheets(kept, sheets)
+        save_sheets(split_out, split_sheets, freeze_header=True, numeric_text=table_sheets)
+        log.info("분리 불가 셀 %d개", len(split_sheets["분리불가"]))
+        log.info("저장: %s", split_out)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Mapping
+from typing import Collection, Mapping
 
 import re
 
@@ -21,7 +21,7 @@ def save_sheets(
     index: bool = False,
     autofit: bool = True,
     freeze_header: bool = False,
-    numeric_text: bool = False,
+    numeric_text: bool | Collection[str] = False,
 ) -> Path:
     """여러 DataFrame 을 시트별로 한 파일에 저장한다.
 
@@ -29,6 +29,7 @@ def save_sheets(
     시트 이름은 엑셀 규칙(31자, 금지문자)에 맞게 자동 보정한다.
     freeze_header=True 이면 첫 행(머리글)을 틀 고정한다.
     numeric_text=True 이면 "12.20" 같은 숫자 문자열을 숫자로 바꾸되, 표시 형식으로 소수 자릿수를 원문대로 유지한다.
+    시트 이름 집합을 주면 그 시트에만 적용한다.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,7 +45,7 @@ def save_sheets(
                 _autofit(writer.sheets[sheet], df, index=index)
             if freeze_header:
                 writer.sheets[sheet].freeze_panes = "A2"
-            if numeric_text:
+            if numeric_text is True or (numeric_text and name in numeric_text):
                 numeric_strings_to_numbers(writer.sheets[sheet], skip_rows=1)
     return path
 

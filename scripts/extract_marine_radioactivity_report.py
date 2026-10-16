@@ -104,7 +104,9 @@ def main() -> None:
         if t.table_id in exclude:
             log.info("  제외: %s %s", t.table_id, t.title)
 
-    save_sheets(args.out, build_sheets(kept), freeze_header=True, numeric_text=True)
+    sheets = build_sheets(kept)
+    table_sheets = {name for name in sheets if name not in ("목록", "각주표시")}
+    save_sheets(args.out, sheets, freeze_header=True, numeric_text=table_sheets)
     log.info("저장: %s", args.out)
 
 

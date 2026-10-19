@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-10-19 (클라우드 세션) — KOEM API 수집 준비, 패키지 정리
+
+### 한 일
+- 패키지 정리(PDF 파이프라인과 API 파이프라인을 분리):
+  - `scripts/example_pipeline.py` → `scripts/pdf_tables_to_excel.py` (범용 PDF 표 → 엑셀만 남김, 가짜 API 뼈대 삭제).
+  - `srdata/api/client.py`(범용): XML 응답 파싱(`xml_to_dict`, `parse_body`), `total_path`(totalCount) 기준 페이지 종료, `check` 훅 추가.
+  - `srdata/koem/` 신설: `datasets.py`(수집 대상 목록 `DATASETS`), `api.py`(`fetch`/`fetch_url`, 공공데이터포털 resultCode·게이트웨이 오류 검사 `check_result`), `tidy.py`(`to_frame`: 숫자 문자열 열만 숫자로).
+  - `scripts/fetch_koem.py`: `list` / `fetch <데이터셋> -p 이름=값` / `url <주소>`. 원본은 `data/raw/koem/<데이터셋>_<시각>.json`(메타 포함, 인증키 제외), 엑셀은 `data/processed/koem_<데이터셋>.xlsx`(시트 "데이터", "메타").
+  - `tests/test_koem.py` 5개(가짜 응답으로 페이지네이션·XML·단일 항목·오류코드·숫자 변환). 전체 17개 통과.
+  - README, CLAUDE.md, .env.example 갱신.
+- 환경 확인: 이 클라우드 컨테이너는 네트워크 정책 때문에 `www.data.go.kr`, `apis.data.go.kr`, `www.meis.go.kr`, `www.koem.or.kr` 에 접속 불가(DNS 실패). 인증키(`DATA_GO_KR_KEY`)도 없음. **실제 호출은 한 번도 못 했다.**
+- 웹 검색으로 확인한 KOEM(해양환경공단) 공개 자료(검색 요약 기준, 상세 페이지를 직접 열어 보지는 못함):
+  - 오픈API: 해양수질자동측정망 하구 및 만 정점조회(data.go.kr 15059971, 요청주소 `http://apis.data.go.kr/B553931/service/OceansWemoReInfoService1/getOceansWemoReInfo1`), 해양환경측정망 CTD 관측서비스(15059974), 지역별 해양수질자동측정망(오이도 15002956 등).
+  - 파일데이터(CSV 다운로드): 해양환경측정망 연안별 평균 해수수질현황(15069047), 해양환경측정망 퇴적물(15134493), 해수부 해양환경측정망 조사정점 정보(15127821), 해양수질 측정망 정점 공간정보(15136739).
+  - 해양환경정보포털(meis.go.kr)에 "해양방사성물질조사정보" 메뉴가 있으나 오픈API 여부는 미확인.
+- `DATASETS` 에는 요청주소를 확인한 `auto_station` 하나만 `verified=False` 로 등록. 나머지는 상세 페이지 확인 후 추가.
+
+### 결정 사항
+- 기관별 API 코드는 `srdata/<기관>/` 패키지로 두고 범용 클라이언트(`srdata.api`)는 건드리지 않는다.
+- 인증키는 "디코딩된" 키를 `.env` 에 둔다(requests 가 인코딩하므로).
+- 클라우드에서 못 하는 실제 호출은 로컬 PC 에서 한다(`pip install -e .[dev]` 후 `python scripts/fetch_koem.py fetch auto_station --max-pages 1`).
+
+### 사용자에게 확인할 것 (답을 받으면 DATASETS 채우기)
+1. "KOEM 데이터" 가 정확히 어느 데이터셋인지: 해양환경측정망(수질·퇴적물·생물, 정점별·분기별) / 해양수질자동측정망(하구·만, 실시간) / CTD / 그 외. 병합 상대가 KINS 방사능 조사(정점·연 1~2회)이므로 해양환경측정망 정점별 수질이 가장 가까워 보임(추론).
+2. 그 데이터가 오픈API 로 제공되는지, 파일데이터(CSV)로만 제공되는지. CSV 만이면 스크립트에 CSV 읽기 경로를 추가.
+3. data.go.kr 활용신청을 했는지, 인증키가 있는지(없으면 발급 필요. 자동승인).
+4. 병합 기준: 정점 코드/정점명/좌표 중 무엇으로 맞출지, 시기(연·분기·채취일)는 어떻게 맞출지.
+
+### 다음 할 일
+1. 위 확인 사항에 따라 `DATASETS` 채우고 로컬에서 `--max-pages 1` 로 응답 구조(items_path, 열 이름) 확인 → `verified=True`.
+2. 전체 수집 → `data/processed/koem_<데이터셋>.xlsx`. 열 이름 한글 설명(상세 페이지 출력결과 표)을 "메타" 또는 별도 "열설명" 시트에 추가.
+3. 병합(merge) 설계: `srdata/analysis/merge.py` — KINS 분리 파일(`…_표_분리_보정.xlsx`)의 정점·채취일과 KOEM 정점·조사일을 키로 결합.
+4. (보류) 다른 연도(vol. 20 이하) 보고서에도 PDF 스크립트가 통하는지 확인.
+
+---
+
 ## 2026-10-16 (2차, 클라우드 세션)
 
 ### 한 일

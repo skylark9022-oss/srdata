@@ -7,7 +7,8 @@
 - 목적: 국가 참조표준 데이터 구축을 위한 데이터 수집·분석.
 - 흐름: (1) KINS 해양환경방사능조사 보고서 PDF 표 → 엑셀 (완료),
   (2) MEIS(해양환경정보포털, meis.go.kr) 해양방사능 정기조사(정밀분석) 화면의 페이지별 엑셀 내려받기 → 취합 (코드 작성, 실행은 로컬),
-  (3) KOEM 오픈API → 엑셀 (API 정보는 사용자가 추후 제공), (2)와 (3) 대조,
+  (3) 해양방사능 조사정보 오픈API → 엑셀 (End Point: https://apis.data.go.kr/1192000/service/OceanRadioactiveSolidExaminationInfoService,
+  데이터셋 키 `ocean_radio_solid`. 오퍼레이션·요청변수·출력결과 명세는 아직 없음), (2)와 (3) 대조,
   (4) PDF 데이터와 병합(merge) → 분석 (예정).
 - 언어: Python 3.10+ 위주. 필요하면 다른 언어·도구 추가 가능.
 - 사용자 혼자 쓴다. 배포·공유 계획 없음. 과한 추상화나 배포용 설정은 만들지 않는다.
@@ -42,9 +43,11 @@
 - 엑셀 저장은 `srdata.excel.save_sheets`, PDF 추출은 `srdata.pdf.extract_tables` / `extract_report_tables`,
   API 호출은 `srdata.api.ApiClient`(범용) 위에 기관별 패키지(`srdata.koem`)를 둔다.
 - KOEM 데이터셋은 `srdata/koem/datasets.py` 의 `DATASETS` 에 등록한다(요청주소·응답 경로는 data.go.kr 상세 페이지에서 확인).
-  실행은 `scripts/fetch_koem.py`. 원본 응답은 `data/raw/koem/`, 엑셀은 `data/processed/koem_<데이터셋>.xlsx`.
+  실행은 `scripts/fetch_koem.py`(인증키는 실행 때 직접 입력, `--key`, `.env` 중 하나; Encoding/Decoding 키 모두 가능).
+  명세를 모르면 `probe` 로 한 번 호출해 결과코드·항목 경로·항목 이름을 본다. 원본 응답은 `data/raw/koem/`, 엑셀은 `data/processed/koem_<데이터셋>.xlsx`.
 - MEIS 엑셀: 내려받기는 `scripts/download_meis_radioactivity.py`(Playwright, `pip install -e .[web]` + `playwright install chromium`),
   취합은 `scripts/combine_meis_excels.py` → `srdata.meis.combine_files`. 원본은 `data/raw/meis/<탭>/`, 결과는 `data/processed/meis_*.xlsx`.
-- 클라우드 세션은 네트워크 정책 때문에 `data.go.kr`·`apis.data.go.kr`·`meis.go.kr` 에 접속하지 못한다(2026-10-19 확인).
+- 클라우드 세션은 네트워크 정책 때문에 `data.go.kr`·`apis.data.go.kr`·`meis.go.kr`·`mof.go.kr`·`web.archive.org` 에
+  접속하지 못한다(프록시 403, 2026-10-19 두 차례 확인). WebFetch 도구도 같은 호스트를 못 연다.
   API 실제 호출은 로컬 PC 에서 하고, 클라우드에서는 가짜 응답 테스트(`tests/test_koem.py`)로 검증한다.
 - 테스트는 `pytest` (tests/).

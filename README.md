@@ -4,7 +4,7 @@
 
 - PDF 보고서(KINS 해양환경방사능조사)에서 표 추출 → 엑셀
 - MEIS(해양환경정보포털) 해양방사능 정기조사 화면의 페이지별 엑셀 내려받기 → 취합 엑셀
-- KOEM(해양환경공단) 오픈API 호출 → 엑셀 (API 정보 확보 후)
+- 해양방사능 조사정보 오픈API(공공데이터포털, 해양수산부 1192000) 호출 → 엑셀
 - (예정) 두 데이터를 정점·시기 기준으로 병합(merge) → 분석
 
 ## 폴더 구조
@@ -66,13 +66,15 @@ python scripts/combine_meis_excels.py data/raw/meis/해수 -o data/processed/mei
 
 자동 내려받기가 안 되면 화면에서 직접 페이지마다 "엑셀"을 눌러 `data/raw/meis/<탭>/` 에 모은 뒤 취합 스크립트만 돌린다.
 
-KOEM 오픈API → 엑셀(`.env` 의 `DATA_GO_KR_KEY` 필요):
+해양방사능 조사정보 오픈API → 엑셀. 인증키는 실행하면 직접 입력하라고 묻는다(`--key`, `.env` 도 가능):
 
 ```bash
-python scripts/fetch_koem.py list                          # 등록된 데이터셋
-python scripts/fetch_koem.py fetch auto_station --max-pages 1   # 응답 모양 확인
-python scripts/fetch_koem.py fetch auto_station -p seaArea=남해
+python scripts/fetch_koem.py list
+python scripts/fetch_koem.py probe ocean_radio_solid --op <오퍼레이션이름>          # 응답 구조 확인(한 번 호출)
+python scripts/fetch_koem.py fetch ocean_radio_solid --op <오퍼레이션이름> -p 이름=값  # 전부 받아 엑셀로
 ```
+
+결과는 `data/processed/koem_ocean_radio_solid.xlsx`(시트 데이터·메타), 원본은 `data/raw/koem/`.
 
 임의 PDF의 표를 모두 뽑아 엑셀로 저장:
 
@@ -95,7 +97,7 @@ KOEM API 호출:
 ```python
 from srdata.koem import fetch, to_frame
 
-rows, meta = fetch("auto_station", {"seaArea": "남해"})   # DATASETS 에 등록된 데이터셋
+rows, meta = fetch("ocean_radio_solid", {"이름": "값"}, operation="<오퍼레이션이름>", service_key="...")
 df = to_frame(rows)
 ```
 

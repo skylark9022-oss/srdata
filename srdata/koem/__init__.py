@@ -9,8 +9,9 @@
 데이터셋 목록은 datasets.py 의 DATASETS 에 둔다(주소·파라미터는 data.go.kr 상세 페이지에서 확인해 추가).
 """
 
-from .api import fetch, fetch_url, check_result, DataGoKrError
+from .api import DataGoKrError, check_result, endpoint, fetch, fetch_url, find_items, normalize_key, probe
 from .datasets import DATASETS, Dataset
 from .tidy import to_frame
 
-__all__ = ["DATASETS", "Dataset", "DataGoKrError", "check_result", "fetch", "fetch_url", "to_frame"]
+__all__ = ["DATASETS", "Dataset", "DataGoKrError", "check_result", "endpoint", "fetch", "fetch_url", "find_items",
+           "normalize_key", "probe", "to_frame"]

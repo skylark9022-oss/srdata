@@ -26,3 +26,12 @@ def test_sheet_name_dedup_and_length():
     a = _safe_sheet_name("x" * 40, used)
     b = _safe_sheet_name("x" * 40, used)
     assert len(a) == 31 and len(b) == 31 and a != b
+
+
+def test_numeric_text_keeps_decimals_and_codes(tmp_path):
+    import openpyxl
+    df = pd.DataFrame({"v": ["1.00", "<0.43", "0", "0.50"], "code": ["0012", "102-04", "7", "0.5"]})
+    out = save_sheets(tmp_path / "n.xlsx", {"d": df}, numeric_text={"d"}, keep_leading_zeros=True)
+    ws = openpyxl.load_workbook(out)["d"]
+    assert [(c.value, c.number_format) for c in ws["A"][1:]] == [(1.0, "0.00"), ("<0.43", "General"), (0, "General"), (0.5, "0.00")]
+    assert [c.value for c in ws["B"][1:]] == ["0012", "102-04", 7, 0.5]

@@ -35,6 +35,23 @@
 - 인증키는 "디코딩된" 키를 `.env` 에 둔다(requests 가 인코딩하므로).
 - 클라우드에서 못 하는 실제 호출은 로컬 PC 에서 한다(`pip install -e .[dev]` 후 `python scripts/fetch_koem.py fetch auto_station --max-pages 1`).
 
+- 사용자 지시로 MEIS 내려받기 스크립트를 다시 씀(커밋 cdd2d07): 분석결과 탭 → 해수 탭 → 관측기간 2025년 1~12월 → 검색 →
+  쪽마다 엑셀 → "엑셀 다운로드 목적 선택" 창에서 "연구(학술)" → 확인. 1·2쪽 요청을 가로채 페이지 파라미터를 알아내면 3쪽부터 직접 요청.
+  모의 사이트(13쪽 126건, 쪽 이동 함수·숨은 form POST·라디오 목적 창)에서 13개 파일·126행 일치 확인.
+  두 번째 모의 구조(일반 링크·세션 기반 엑셀·select 목적 창)는 사용자가 API 로 방향을 바꿔 시험하지 않음. 실제 사이트는 미검증.
+  컨테이너의 Playwright(1.64)와 미리 깔린 Chromium 버전이 달라 `--browser-path /opt/pw-browsers/chromium` 이 필요했음.
+- 사용자 결정: MEIS 화면 접근이 안 되면 **API 호출만 진행**. End Point
+  `https://apis.data.go.kr/1192000/service/OceanRadioactiveSolidExaminationInfoService` (1192000 = 해양수산부) 받음.
+  - 이 서비스 이름으로 웹 검색해도 명세 문서가 나오지 않음. 가장 가까운 공개 항목은 data.go.kr 15114322
+    "해양수산부_해양방사성물질 조사 정보 조회 서비스"(REST, XML, 조사정점명·분석항목명으로 조회)이나 같은 서비스인지 확인 못 함.
+  - `DATASETS["ocean_radio_solid"]` 등록(오퍼레이션 비어 있음). `Dataset` 에 operation·labels 추가.
+  - `fetch_koem.py`: 인증키 직접 입력(getpass, 화면에 안 보임) / `--key` / `.env`, `--save-key`, `--op`, `probe` 하위 명령
+    (한 번 호출 → 결과코드·항목 경로·항목 이름·응답 원문 저장). Encoding 키를 넣어도 `normalize_key` 가 디코딩.
+  - 엑셀 저장 시 "1.00" 이 1 로 바뀌어 유효숫자가 사라지는 결함을 모의 서버 시험에서 발견 → 문자열로 넘기고 `numeric_text` 로
+    숫자화(표시 형식 0.00 유지). `save_sheets(keep_leading_zeros=True)` 로 "0012" 같은 코드는 문자열 유지(기본값은 기존 동작 그대로).
+  - 모의 공공데이터포털 서버로 확인: 237행 3쪽 수집, 인코딩 키 처리, 잘못된 키 → resultCode 30, 잘못된 오퍼레이션 → 12,
+    가상 터미널에서 키 직접 입력, `.env` 에 키가 저장되지 않음. 테스트 26개 통과.
+
 ### 사용자 답변 (2026-10-19)
 - MEIS 탭 범위: **해수만**. 관측기간: 2025년 1월 ~ 현재(2026년 10월). 대조 기준: 정점명·시료채취일자·수심·핵종 열.
 - KOEM API 정보는 사용자가 추후 제공. 받은 뒤 MEIS 취합본과 대조.
@@ -48,6 +65,8 @@
 4. 병합 기준: 정점 코드/정점명/좌표 중 무엇으로 맞출지, 시기(연·분기·채취일)는 어떻게 맞출지.
 
 ### 다음 할 일
+-1. 사용자에게 API 명세 받기: 상세기능(오퍼레이션) 이름, 요청변수 표(필수 여부), 출력결과 표(항목명·설명), 응답 형식, 트래픽 한도.
+    받으면 `DATASETS["ocean_radio_solid"]` 의 operation·params·labels 를 채우고 `probe` → `fetch` (로컬 또는 네트워크 허용된 세션).
 0. (로컬) `pip install -e .[dev,web]`, `playwright install chromium` → `python scripts/download_meis_radioactivity.py --show` 로 해수 탭 38쪽 내려받기
    → `python scripts/combine_meis_excels.py data/raw/meis/해수` → 취합 결과 372행인지, 분리불가 0인지 확인. 나머지 탭(해저퇴적물, 패류, 어류)도 같은 방식.
 1. 위 확인 사항에 따라 `DATASETS` 채우고 로컬에서 `--max-pages 1` 로 응답 구조(items_path, 열 이름) 확인 → `verified=True`.

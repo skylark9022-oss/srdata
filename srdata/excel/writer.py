@@ -11,6 +11,7 @@ import pandas as pd
 
 _MAX_SHEET_NAME = 31
 _NUMBER_RE = re.compile(r"^-?\d+(\.\d+)?$")
+_LEADING_ZERO_RE = re.compile(r"^-?0\d")  # "007", "0012" (코드). "0", "0.5" 는 해당 없음
 _FORBIDDEN = set('[]:*?/\\')
 
 
@@ -22,6 +23,7 @@ def save_sheets(
     autofit: bool = True,
     freeze_header: bool = False,
     numeric_text: bool | Collection[str] = False,
+    keep_leading_zeros: bool = False,
 ) -> Path:
     """여러 DataFrame 을 시트별로 한 파일에 저장한다.
 
@@ -30,6 +32,7 @@ def save_sheets(
     freeze_header=True 이면 첫 행(머리글)을 틀 고정한다.
     numeric_text=True 이면 "12.20" 같은 숫자 문자열을 숫자로 바꾸되, 표시 형식으로 소수 자릿수를 원문대로 유지한다.
     시트 이름 집합을 주면 그 시트에만 적용한다.
+    keep_leading_zeros=True 이면 "0012" 처럼 0 으로 시작하는 정수 문자열은 코드로 보고 문자열로 둔다.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -46,7 +49,7 @@ def save_sheets(
             if freeze_header:
                 writer.sheets[sheet].freeze_panes = "A2"
             if numeric_text is True or (numeric_text and name in numeric_text):
-                numeric_strings_to_numbers(writer.sheets[sheet], skip_rows=1)
+                numeric_strings_to_numbers(writer.sheets[sheet], skip_rows=1, keep_leading_zeros=keep_leading_zeros)
     return path
 
 
@@ -77,7 +80,7 @@ def _display_len(value) -> int:
     return sum(2 if ord(ch) > 0x2E7F else 1 for ch in s)
 
 
-def numeric_strings_to_numbers(ws, *, skip_rows: int = 1) -> int:
+def numeric_strings_to_numbers(ws, *, skip_rows: int = 1, keep_leading_zeros: bool = False) -> int:
     """숫자만 있는 문자열 셀을 숫자로 바꾸고, 소수 자릿수를 표시 형식으로 남긴다.
 
     "1.60" → 1.6 (형식 0.00), "0" → 0, "102-04"·"2025.05.29" 는 그대로. 바꾼 셀 수를 돌려준다.
@@ -87,6 +90,8 @@ def numeric_strings_to_numbers(ws, *, skip_rows: int = 1) -> int:
         for cell in row:
             v = cell.value
             if isinstance(v, str) and _NUMBER_RE.match(v):
+                if keep_leading_zeros and _LEADING_ZERO_RE.match(v):
+                    continue
                 if "." in v:
                     cell.value = float(v)
                     cell.number_format = "0." + "0" * len(v.split(".")[1])

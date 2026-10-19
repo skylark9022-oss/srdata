@@ -102,3 +102,42 @@ def _fake_init(fake):
         self.timeout, self.retries, self.backoff = timeout, retries, backoff
         self.session = fake
     return __init__
+
+
+def test_normalize_key_and_endpoint():
+    from srdata.koem import endpoint, normalize_key
+    assert normalize_key(" abc%2Bdef%2F%3D%3D \n") == "abc+def/=="
+    assert normalize_key("abc+def/==") == "abc+def/=="
+    assert endpoint("https://x/svc/", "getA") == "https://x/svc/getA"
+    assert endpoint("https://x/svc", "") == "https://x/svc"
+
+
+def test_find_items_nonstandard():
+    from srdata.koem import find_items
+    data = {"result": {"rows": {"row": [{"a": "1"}, {"a": "2", "b": "3"}]}, "meta": [{"x": 1}]}}
+    path, items = find_items(data)
+    assert path == ["result", "rows", "row"] and len(items) == 2
+
+
+def test_probe_reports_structure(monkeypatch):
+    import srdata.koem.api as api
+    xml = ("<response><header><resultCode>00</resultCode><resultMsg>OK</resultMsg></header><body><items>"
+           "<item><stnNm>CW2311</stnNm><cs137>1.30</cs137></item><item><stnNm>CW2328</stnNm><h3>0.1</h3></item>"
+           "</items><totalCount>372</totalCount></body></response>")
+    calls = []
+    monkeypatch.setattr(requests, "get", lambda url, params=None, timeout=None: calls.append(params) or _resp(xml))
+    r = api.probe("http://example.invalid/svc/getX", {"year": "2025"}, service_key="k%2B1", page_size=2)
+    assert r["result"] == "정상" and r["total"] == "372"
+    assert r["items_path"] == ["response", "body", "items", "item"]
+    assert r["fields"] == ["stnNm", "cs137", "h3"]
+    assert calls[0] == {"serviceKey": "k+1", "pageNo": 1, "numOfRows": 2, "year": "2025"}
+
+
+def test_probe_gateway_error(monkeypatch):
+    import srdata.koem.api as api
+    xml = ("<OpenAPI_ServiceResponse><cmmMsgHeader><errMsg>SERVICE ERROR</errMsg>"
+           "<returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg><returnReasonCode>30</returnReasonCode>"
+           "</cmmMsgHeader></OpenAPI_ServiceResponse>")
+    monkeypatch.setattr(requests, "get", lambda url, params=None, timeout=None: _resp(xml))
+    r = api.probe("http://example.invalid/svc/getX", service_key="k")
+    assert "resultCode=30" in r["result"] and "items_path" not in r

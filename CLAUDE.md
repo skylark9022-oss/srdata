@@ -5,8 +5,10 @@
 ## 프로젝트
 
 - 목적: 국가 참조표준 데이터 구축을 위한 데이터 수집·분석.
-- 흐름: (1) KINS 해양환경방사능조사 보고서 PDF 표 → 엑셀 (완료), (2) KOEM(해양환경공단) 오픈API → 엑셀 (진행 중),
-  (3) 두 데이터를 정점·시기 기준으로 병합(merge) → 분석 (예정).
+- 흐름: (1) KINS 해양환경방사능조사 보고서 PDF 표 → 엑셀 (완료),
+  (2) MEIS(해양환경정보포털, meis.go.kr) 해양방사능 정기조사(정밀분석) 화면의 페이지별 엑셀 내려받기 → 취합 (코드 작성, 실행은 로컬),
+  (3) KOEM 오픈API → 엑셀 (API 정보는 사용자가 추후 제공), (2)와 (3) 대조,
+  (4) PDF 데이터와 병합(merge) → 분석 (예정).
 - 언어: Python 3.10+ 위주. 필요하면 다른 언어·도구 추가 가능.
 - 사용자 혼자 쓴다. 배포·공유 계획 없음. 과한 추상화나 배포용 설정은 만들지 않는다.
 - 대화는 한국어로 한다.
@@ -41,6 +43,8 @@
   API 호출은 `srdata.api.ApiClient`(범용) 위에 기관별 패키지(`srdata.koem`)를 둔다.
 - KOEM 데이터셋은 `srdata/koem/datasets.py` 의 `DATASETS` 에 등록한다(요청주소·응답 경로는 data.go.kr 상세 페이지에서 확인).
   실행은 `scripts/fetch_koem.py`. 원본 응답은 `data/raw/koem/`, 엑셀은 `data/processed/koem_<데이터셋>.xlsx`.
-- 클라우드 세션은 네트워크 정책 때문에 `data.go.kr`·`apis.data.go.kr`·`meis.go.kr` 에 접속하지 못할 수 있다.
+- MEIS 엑셀: 내려받기는 `scripts/download_meis_radioactivity.py`(Playwright, `pip install -e .[web]` + `playwright install chromium`),
+  취합은 `scripts/combine_meis_excels.py` → `srdata.meis.combine_files`. 원본은 `data/raw/meis/<탭>/`, 결과는 `data/processed/meis_*.xlsx`.
+- 클라우드 세션은 네트워크 정책 때문에 `data.go.kr`·`apis.data.go.kr`·`meis.go.kr` 에 접속하지 못한다(2026-10-19 확인).
   API 실제 호출은 로컬 PC 에서 하고, 클라우드에서는 가짜 응답 테스트(`tests/test_koem.py`)로 검증한다.
 - 테스트는 `pytest` (tests/).

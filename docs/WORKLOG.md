@@ -20,6 +20,15 @@
   - 파일데이터(CSV 다운로드): 해양환경측정망 연안별 평균 해수수질현황(15069047), 해양환경측정망 퇴적물(15134493), 해수부 해양환경측정망 조사정점 정보(15127821), 해양수질 측정망 정점 공간정보(15136739).
   - 해양환경정보포털(meis.go.kr)에 "해양방사성물질조사정보" 메뉴가 있으나 오픈API 여부는 미확인.
 - `DATASETS` 에는 요청주소를 확인한 `auto_station` 하나만 `verified=False` 로 등록. 나머지는 상세 페이지 확인 후 추가.
+- 세션 도중 사용자 추가 요청: MEIS 해양방사능 정기조사(정밀분석) 화면(https://www.meis.go.kr/oceansafety/analysis/analysisOceanPeriodic.do)의
+  엑셀을 페이지마다(10건씩, 2025년 1월~ 372건 38쪽) 내려받아 취합. API 정보는 추후 사용자가 제공, 받은 뒤 두 자료 대조.
+  - `srdata/meis/combine.py`: 파일 형식(xlsx / xls / HTML-as-xls)을 앞 바이트로 구분해 읽고, "정점명" 이 있는 행을 머리글로,
+    열 합집합으로 세로 결합, 전체 열 기준 중복 제거(파일별 제거 수 기록), 정렬.
+  - `scripts/combine_meis_excels.py`: 시트 취합(원문)·분리(측정값 분리, PDF 분리 규칙 재사용)·파일목록·분리불가.
+    가짜 파일 2개로 끝까지 실행해 확인. `tests/test_meis.py` 4개.
+  - `scripts/download_meis_radioactivity.py`: Playwright 로 탭·관측기간 설정 → 검색 → 페이지마다 "엑셀" 클릭.
+    **화면 HTML 을 보지 못한 채 글자 기준 선택자로 작성했으므로 미검증.** 첫 실행은 `--show` 로. 안 되면 수동 내려받기 + 취합 스크립트.
+  - 의존성 추가: xlrd, lxml(기본), playwright(`[web]`).
 
 ### 결정 사항
 - 기관별 API 코드는 `srdata/<기관>/` 패키지로 두고 범용 클라이언트(`srdata.api`)는 건드리지 않는다.
@@ -33,6 +42,8 @@
 4. 병합 기준: 정점 코드/정점명/좌표 중 무엇으로 맞출지, 시기(연·분기·채취일)는 어떻게 맞출지.
 
 ### 다음 할 일
+0. (로컬) `pip install -e .[dev,web]`, `playwright install chromium` → `python scripts/download_meis_radioactivity.py --show` 로 해수 탭 38쪽 내려받기
+   → `python scripts/combine_meis_excels.py data/raw/meis/해수` → 취합 결과 372행인지, 분리불가 0인지 확인. 나머지 탭(해저퇴적물, 패류, 어류)도 같은 방식.
 1. 위 확인 사항에 따라 `DATASETS` 채우고 로컬에서 `--max-pages 1` 로 응답 구조(items_path, 열 이름) 확인 → `verified=True`.
 2. 전체 수집 → `data/processed/koem_<데이터셋>.xlsx`. 열 이름 한글 설명(상세 페이지 출력결과 표)을 "메타" 또는 별도 "열설명" 시트에 추가.
 3. 병합(merge) 설계: `srdata/analysis/merge.py` — KINS 분리 파일(`…_표_분리_보정.xlsx`)의 정점·채취일과 KOEM 정점·조사일을 키로 결합.

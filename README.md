@@ -3,7 +3,8 @@
 국가 참조표준 데이터 구축을 위한 데이터 수집·분석 프로젝트.
 
 - PDF 보고서(KINS 해양환경방사능조사)에서 표 추출 → 엑셀
-- KOEM(해양환경공단) 오픈API 호출 → 엑셀
+- MEIS(해양환경정보포털) 해양방사능 정기조사 화면의 페이지별 엑셀 내려받기 → 취합 엑셀
+- KOEM(해양환경공단) 오픈API 호출 → 엑셀 (API 정보 확보 후)
 - (예정) 두 데이터를 정점·시기 기준으로 병합(merge) → 분석
 
 ## 폴더 구조
@@ -14,11 +15,14 @@ srdata/
 │   ├── config.py      #   경로, 환경변수(.env) 로딩
 │   ├── api/           #   범용 REST 클라이언트 (재시도, 페이지네이션, JSON/XML)
 │   ├── koem/          #   KOEM 오픈API: 데이터셋 목록(datasets.py), 호출(api.py), 정리(tidy.py)
+│   ├── meis/          #   MEIS 화면에서 내려받은 엑셀 취합(combine.py)
 │   ├── pdf/           #   PDF 텍스트/표 추출 (extract.py 범용, report_tables.py 보고서용)
 │   ├── excel/         #   엑셀 저장
 │   └── analysis/      #   분석 코드 (measurements.py: 측정값 문자열 분리)
 ├── scripts/           # 실제로 실행하는 스크립트
 │   ├── extract_marine_radioactivity_report.py   # KINS 보고서 PDF → 엑셀
+│   ├── download_meis_radioactivity.py           # MEIS 정기조사 화면 엑셀을 페이지마다 내려받기(Playwright)
+│   ├── combine_meis_excels.py                   # 내려받은 엑셀들 → 취합 엑셀(취합·분리 시트)
 │   ├── fetch_koem.py                            # KOEM API → 엑셀
 │   └── pdf_tables_to_excel.py                   # 임의 PDF 표 → 엑셀 (범용)
 ├── notebooks/         # 탐색용 주피터 노트북
@@ -51,6 +55,16 @@ KINS 해양환경방사능조사 보고서 PDF → 엑셀(원문 그대로 / 값
 ```bash
 python scripts/extract_marine_radioactivity_report.py
 ```
+
+MEIS 해양방사능 정기조사 엑셀 내려받기 → 취합:
+
+```bash
+pip install -e .[web] && playwright install chromium      # 하루 한 번
+python scripts/download_meis_radioactivity.py --show       # 해수 탭, 2025년 1월~, data/raw/meis/해수/
+python scripts/combine_meis_excels.py data/raw/meis/해수 -o data/processed/meis_해양방사능_해수.xlsx
+```
+
+자동 내려받기가 안 되면 화면에서 직접 페이지마다 "엑셀"을 눌러 `data/raw/meis/<탭>/` 에 모은 뒤 취합 스크립트만 돌린다.
 
 KOEM 오픈API → 엑셀(`.env` 의 `DATA_GO_KR_KEY` 필요):
 

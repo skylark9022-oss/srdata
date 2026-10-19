@@ -41,13 +41,15 @@ class Dataset:
 _STD = ("response", "body", "items", "item")
 
 DATASETS: dict[str, Dataset] = {
-    # 사용자가 준 End Point (2026-10-19). 기관코드 1192000 = 해양수산부.
+    # 사용자가 활용신청·승인 후 받은 End Point (2026-10-19). 기관코드 1192000 = 해양수산부.
+    # 상세 페이지: data.go.kr 15114322 "해양수산부_해양방사성물질 조사 정보 조회 서비스"(사용자 확인).
     # 오퍼레이션 이름·요청변수·출력결과는 아직 모름 → 첫 호출은 `fetch_koem.py probe ocean_radio_solid --op <오퍼레이션>`.
     "ocean_radio_solid": Dataset(
         key="ocean_radio_solid",
         title="해양방사능 조사정보(OceanRadioactiveSolidExaminationInfoService)",
         url="https://apis.data.go.kr/1192000/service/OceanRadioactiveSolidExaminationInfoService",
         operation="",
+        source="https://www.data.go.kr/data/15114322/openapi.do",
         note="오퍼레이션 이름을 모름. data.go.kr 상세 페이지의 '상세기능'에서 확인해 operation 에 적거나 --op 로 준다.",
         verified=False,
     ),

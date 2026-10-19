@@ -65,7 +65,10 @@
 4. 병합 기준: 정점 코드/정점명/좌표 중 무엇으로 맞출지, 시기(연·분기·채취일)는 어떻게 맞출지.
 
 ### 다음 할 일
--1. 사용자에게 API 명세 받기: 상세기능(오퍼레이션) 이름, 요청변수 표(필수 여부), 출력결과 표(항목명·설명), 응답 형식, 트래픽 한도.
+-1. (사용자 확인) End Point 는 활용신청 승인으로 받은 정확한 주소, 상세 페이지는 data.go.kr 15114322.
+    사용자가 준 PDF(gateway_swagger_guide.pdf, 8쪽)는 공공데이터포털 공통 Swagger 사용 안내서라 이 API 의 오퍼레이션·변수·항목은 없음.
+    data.go.kr 은 이 세션에서 접속 불가(WebFetch 도 DNS 실패) → 사용자에게 페이지 저장본(HTML) 또는 Swagger 내용 복사를 요청함.
+    사용자에게 API 명세 받기: 상세기능(오퍼레이션) 이름, 요청변수 표(필수 여부), 출력결과 표(항목명·설명), 응답 형식, 트래픽 한도.
     받으면 `DATASETS["ocean_radio_solid"]` 의 operation·params·labels 를 채우고 `probe` → `fetch` (로컬 또는 네트워크 허용된 세션).
 0. (로컬) `pip install -e .[dev,web]`, `playwright install chromium` → `python scripts/download_meis_radioactivity.py --show` 로 해수 탭 38쪽 내려받기
    → `python scripts/combine_meis_excels.py data/raw/meis/해수` → 취합 결과 372행인지, 분리불가 0인지 확인. 나머지 탭(해저퇴적물, 패류, 어류)도 같은 방식.
